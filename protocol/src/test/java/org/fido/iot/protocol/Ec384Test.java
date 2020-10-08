@@ -5,7 +5,6 @@ package org.fido.iot.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
@@ -51,7 +50,7 @@ public class Ec384Test {
     PublicKey p2 = service.decode(pub);
     assertTrue(service.compare(publicKey, p2) == 0);
 
-    Composite cos = service.sign(privateKey, payload);
+    Composite cos = service.sign(privateKey, service.getCoseAlgorithm(privateKey), payload);
 
     assertTrue(service.verify(publicKey, cos));
 

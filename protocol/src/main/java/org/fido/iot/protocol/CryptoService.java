@@ -81,7 +81,7 @@ public class CryptoService {
           rnd = SecureRandom.getInstance(alg);
           break;
         } catch (NoSuchAlgorithmException e) {
-          //suppress priority list
+          // suppress priority list
         }
       }
     }
@@ -218,7 +218,7 @@ public class CryptoService {
    * @return The COSE algorithm id.
    */
   public int getCoseAlgorithm(Key key) {
-    if (key instanceof ECKey) {
+    if (key instanceof ECKey || key.getAlgorithm().equals(Const.EC_ALG_NAME)) {
       int bitLength = ((ECKey) key).getParams().getCurve().getField().getFieldSize();
       if (bitLength == Const.BIT_LEN_256) {
         return Const.COSE_ES256;
@@ -226,8 +226,8 @@ public class CryptoService {
       if (bitLength == Const.BIT_LEN_384) {
         return Const.COSE_ES384;
       }
-      //} else if (key instanceof RSAKey) {
-      //todo: rsa key size
+      // } else if (key instanceof RSAKey) {
+      // todo: rsa key size
     }
     throw new RuntimeException(new NoSuchAlgorithmException());
   }
@@ -263,14 +263,12 @@ public class CryptoService {
     if (key instanceof ECKey) {
       int bitLength = ((ECKey) key).getParams().getCurve().getField().getFieldSize();
       if (bitLength == Const.BIT_LEN_256) {
-        return Composite.newArray()
-            .set(Const.SG_TYPE, Const.PK_SECP256R1)
-            .set(Const.SG_INFO, Const.EMPTY_BYTE);
+        return Composite.newArray().set(Const.SG_TYPE, Const.PK_SECP256R1).set(Const.SG_INFO,
+            Const.EMPTY_BYTE);
       }
       if (bitLength == Const.BIT_LEN_384) {
-        return Composite.newArray()
-            .set(Const.SG_TYPE, Const.PK_SECP384R1)
-            .set(Const.SG_INFO, Const.EMPTY_BYTE);
+        return Composite.newArray().set(Const.SG_TYPE, Const.PK_SECP384R1).set(Const.SG_INFO,
+            Const.EMPTY_BYTE);
       }
     }
     throw new RuntimeException(new NoSuchAlgorithmException());
@@ -370,7 +368,7 @@ public class CryptoService {
       }
     } else if (key instanceof RSAPublicKey) {
       int bitLength = ((RSAPublicKey) key).getModulus().bitLength();
-      //todo:  find in RSA type for EPID keys
+      // todo: find in RSA type for EPID keys
     }
     throw new RuntimeException(new InvalidKeyException());
   }
@@ -393,7 +391,7 @@ public class CryptoService {
       }
     } else if (key instanceof RSAPublicKey) {
       int bitLength = ((RSAPublicKey) key).getModulus().bitLength();
-      //todo: file in RSA type for EPID
+      // todo: file in RSA type for EPID
     }
     throw new CryptoServiceException(new NoSuchAlgorithmException());
   }
@@ -401,7 +399,7 @@ public class CryptoService {
   protected byte[] adjustBigBuffer(byte[] buffer, int byteLength) {
     final ByteBuffer result = ByteBuffer.allocate(byteLength);
     int skip = 0;
-    //skip leading zero that BigInteger may add
+    // skip leading zero that BigInteger may add
     while ((buffer.length - skip) > byteLength) {
       skip++;
     }
@@ -451,14 +449,14 @@ public class CryptoService {
         pm.set(Const.PK_BODY, body);
 
       }
-      break;
+        break;
       case Const.PK_ENC_X509: {
         X509EncodedKeySpec x509 = new X509EncodedKeySpec(publicKey.getEncoded());
         pm.set(Const.PK_ENC, Const.PK_ENC_X509);
         pm.set(Const.PK_BODY, x509.getEncoded());
         pm.set(Const.PK_TYPE, getPublicKeyType(publicKey));
       }
-      break;
+        break;
       default:
         throw new CryptoServiceException(new NoSuchAlgorithmException());
     }
@@ -567,14 +565,13 @@ public class CryptoService {
         anchors.add(new TrustAnchor(anchorCert, null));
       }
 
-      final CertPathValidator validator =
-          CertPathValidator.getInstance(getValidatorAlgorithm());
+      final CertPathValidator validator = CertPathValidator.getInstance(getValidatorAlgorithm());
 
       final CertPathParameters params = getCertPathParameters(anchors);
 
       validator.validate(cp, params);
-    } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException
-        | CertificateException | CertPathValidatorException e) {
+    } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | CertificateException
+        | CertPathValidatorException e) {
       throw new CryptoServiceException(e);
     }
   }
@@ -583,19 +580,18 @@ public class CryptoService {
    * Produces a COSE Signature.
    *
    * @param signingKey The signing key.
+   * @param coseSignatureAlg The COSE algorithm that determines the signature.
    * @param payload    The payload to sign.
    * @return The resulting COSE Signature.
    */
-  public Composite sign(PrivateKey signingKey, byte[] payload) {
+  public Composite sign(PrivateKey signingKey, int coseSignatureAlg, byte[] payload) {
 
-    final int algId = getCoseAlgorithm(signingKey);
     final Composite cos = Composite.newArray()
-        .set(Const.COSE_SIGN1_PROTECTED, Composite.newMap().set(Const.COSE_ALG, algId))
-        .set(Const.COSE_SIGN1_UNPROTECTED, Const.EMPTY_BYTE)
-        .set(Const.COSE_SIGN1_PAYLOAD, payload);
+        .set(Const.COSE_SIGN1_PROTECTED, Composite.newMap().set(Const.COSE_ALG, coseSignatureAlg))
+        .set(Const.COSE_SIGN1_UNPROTECTED, Const.EMPTY_BYTE).set(Const.COSE_SIGN1_PAYLOAD, payload);
 
     try {
-      final String algName = getSignatureAlgorithm(algId);
+      final String algName = getSignatureAlgorithm(coseSignatureAlg);
 
       final Signature signer = getSignatureInstance(algName);
       signer.initSign(signingKey);
@@ -635,9 +631,7 @@ public class CryptoService {
       mac.init(secretKey);
       final byte[] macData = mac.doFinal(data);
 
-      return Composite.newArray()
-          .set(Const.HASH_TYPE, hashType)
-          .set(Const.HASH, macData);
+      return Composite.newArray().set(Const.HASH_TYPE, hashType).set(Const.HASH, macData);
 
     } catch (InvalidKeyException | NoSuchAlgorithmException e) {
       throw new CryptoServiceException(e);
@@ -662,9 +656,7 @@ public class CryptoService {
 
       final byte[] result = digest.digest(data);
 
-      return Composite.newArray()
-          .set(Const.HASH_TYPE, hashType)
-          .set(Const.HASH, result);
+      return Composite.newArray().set(Const.HASH_TYPE, hashType).set(Const.HASH, result);
 
     } catch (NoSuchAlgorithmException e) {
       throw new CryptoServiceException(e);
@@ -687,8 +679,7 @@ public class CryptoService {
    * @return The Certificate.
    * @throws CertificateException If the DER value is not a valid certificate.
    */
-  public Certificate getCertificate(CertificateFactory cf, byte[] der)
-      throws CertificateException {
+  public Certificate getCertificate(CertificateFactory cf, byte[] der) throws CertificateException {
     final ByteArrayInputStream in = new ByteArrayInputStream(der);
     return cf.generateCertificate(in);
   }
@@ -702,8 +693,7 @@ public class CryptoService {
    */
   public CertPath getCertPath(Composite chain) throws CertificateException {
 
-    final CertificateFactory cf = CertificateFactory
-        .getInstance(getCertPathAlgorithm());
+    final CertificateFactory cf = CertificateFactory.getInstance(getCertPathAlgorithm());
 
     final List<Certificate> list = new ArrayList<>();
     for (int i = 0; i < chain.size(); i++) {
@@ -736,8 +726,7 @@ public class CryptoService {
    */
   public KeyPair createKeyPair(String algName) {
 
-    if (algName.equals(Const.SECP256R1_CURVE_NAME)
-        || algName.equals(Const.SECP384R1_CURVE_NAME)) {
+    if (algName.equals(Const.SECP256R1_CURVE_NAME) || algName.equals(Const.SECP384R1_CURVE_NAME)) {
 
       try {
         ECGenParameterSpec ecSpec = new ECGenParameterSpec(algName);
@@ -747,7 +736,7 @@ public class CryptoService {
       } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException e) {
         throw new CryptoServiceException(e);
       }
-      //} else if (algName.equals("")) {
+      // } else if (algName.equals("")) {
       //
     }
     throw new CryptoServiceException(new NoSuchAlgorithmException(algName));
@@ -781,7 +770,7 @@ public class CryptoService {
 
       for (int i = 0; i < Const.FOURTH_KEY; i++) {
 
-        //get the size of the three part message
+        // get the size of the three part message
         int len = (short) (((bis.read() & 0xFF) << 8) | (bis.read() & 0xFF));
         if (len < 0 || len >= message.length) {
           throw new IllegalArgumentException();
@@ -812,7 +801,7 @@ public class CryptoService {
     final int byteLength = bitLength / Byte.SIZE;
     final byte[] randomBytes = getRandomBytes(randomSize);
 
-    //bstr[blen(x), x, blen(y), y, blen(Random), Random]
+    // bstr[blen(x), x, blen(y), y, blen(Random), Random]
     final byte[] x = adjustBigBuffer(publicKey.getW().getAffineX().toByteArray(), byteLength);
     final byte[] y = adjustBigBuffer(publicKey.getW().getAffineY().toByteArray(), byteLength);
 
@@ -823,12 +812,10 @@ public class CryptoService {
       bao.writeBytes(y);
       writeLen(bao, randomBytes.length);
       bao.writeBytes(randomBytes);
-      return Composite.newArray()
-          .set(Const.FIRST_KEY, bao.toByteArray())
+      return Composite.newArray().set(Const.FIRST_KEY, bao.toByteArray())
           .set(Const.SECOND_KEY, Const.ECDH_ALG_NAME)
           .set(Const.THIRD_KEY, kp.getPrivate().getFormat())
-          .set(Const.FOURTH_KEY, kp.getPrivate().getEncoded())
-          .set(Const.FIFTH_KEY, party);
+          .set(Const.FOURTH_KEY, kp.getPrivate().getEncoded()).set(Const.FIFTH_KEY, party);
     } catch (IOException ioException) {
       throw new CryptoServiceException(ioException);
     }
@@ -858,16 +845,16 @@ public class CryptoService {
 
       final Composite ownMessage = decodeEcdhMessage(ownState.getAsBytes(Const.FIRST_KEY));
       final byte[] ownRandom = ownMessage.getAsBytes(Const.THIRD_KEY);
-      final ByteBuffer buffer = ByteBuffer
-          .allocate(sharedSecret.length + ownRandom.length + theirRandom.length);
+      final ByteBuffer buffer =
+          ByteBuffer.allocate(sharedSecret.length + ownRandom.length + theirRandom.length);
       buffer.put(sharedSecret);
       final String party = ownState.getAsString(Const.FIFTH_KEY);
       if (party.equals(Const.KEY_EXCHANGE_A)) {
-        //A is owner
+        // A is owner
         buffer.put(theirRandom);
         buffer.put(ownRandom);
       } else if (party.equals(Const.KEY_EXCHANGE_B)) {
-        //B is device
+        // B is device
         buffer.put(ownRandom);
         buffer.put(theirRandom);
       } else {
@@ -932,12 +919,8 @@ public class CryptoService {
     }
 
     Composite cose0 = Composite.newArray()
-        .set(Const.COSE_SIGN1_PROTECTED,
-            Composite.newMap()
-                .set(Const.ETM_AES_PLAIN_TYPE, aesType))
-        .set(Const.COSE_SIGN1_UNPROTECTED,
-            Composite.newMap()
-                .set(Const.ETM_AES_IV, iv))
+        .set(Const.COSE_SIGN1_PROTECTED, Composite.newMap().set(Const.ETM_AES_PLAIN_TYPE, aesType))
+        .set(Const.COSE_SIGN1_UNPROTECTED, Composite.newMap().set(Const.ETM_AES_IV, iv))
         .set(Const.COSE_SIGN1_PAYLOAD, ciphered);
 
     int hmacType;
@@ -953,17 +936,15 @@ public class CryptoService {
     byte[] payload = cose0.toBytes();
     Composite mac = hash(hmacType, secret, payload);
     Composite mac0 = Composite.newArray()
-        .set(Const.COSE_SIGN1_PROTECTED, Composite.newMap()
-            .set(Const.ETM_MAC_TYPE, hmacType))
-        .set(Const.COSE_SIGN1_UNPROTECTED, Const.EMPTY_BYTE)
-        .set(Const.COSE_SIGN1_PAYLOAD, payload)
+        .set(Const.COSE_SIGN1_PROTECTED, Composite.newMap().set(Const.ETM_MAC_TYPE, hmacType))
+        .set(Const.COSE_SIGN1_UNPROTECTED, Const.EMPTY_BYTE).set(Const.COSE_SIGN1_PAYLOAD, payload)
         .set(Const.COSE_SIGN1_SIGNATURE, mac.getAsBytes(Const.HASH));
 
     return mac0;
   }
 
   protected Composite getSmallerKdf(byte[] shSe) {
-    //HMAC-SHA-256[0,(byte)1||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-cipher"||ShSe]
+    // HMAC-SHA-256[0,(byte)1||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-cipher"||ShSe]
     ByteBuffer buffer = ByteBuffer
         .allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_CIPHER.length + shSe.length);
     buffer.put((byte) 1);
@@ -974,12 +955,12 @@ public class CryptoService {
     buffer.flip();
     Composite hash = hash(Const.HMAC_SHA_256, Const.HMAC_ZERO, Composite.unwrap(buffer));
     buffer = ByteBuffer.wrap(hash.getAsBytes(Const.HASH));
-    byte[] sek = new byte[(Const.BIT_LEN_256 / Byte.SIZE) / 2];//16 bytes
+    byte[] sek = new byte[(Const.BIT_LEN_256 / Byte.SIZE) / 2];// 16 bytes
     buffer.get(sek);
 
-    //HMAC-SHA-256[0,(byte)2||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-hmac"||ShSe]
-    buffer = ByteBuffer
-        .allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_HMAC.length + shSe.length);
+    // HMAC-SHA-256[0,(byte)2||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-hmac"||ShSe]
+    buffer =
+        ByteBuffer.allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_HMAC.length + shSe.length);
 
     buffer.put((byte) 2);
     buffer.put(Const.KDF_STRING);
@@ -990,16 +971,14 @@ public class CryptoService {
 
     hash = hash(Const.HMAC_SHA_256, Const.HMAC_ZERO, Composite.unwrap(buffer));
     buffer = ByteBuffer.wrap(hash.getAsBytes(Const.HASH));
-    byte[] svk = new byte[Const.BIT_LEN_256 / Byte.SIZE]; //32 bytes
+    byte[] svk = new byte[Const.BIT_LEN_256 / Byte.SIZE]; // 32 bytes
     buffer.get(svk);
 
-    return Composite.newArray()
-        .set(Const.FIRST_KEY, sek)
-        .set(Const.SECOND_KEY, svk);
+    return Composite.newArray().set(Const.FIRST_KEY, sek).set(Const.SECOND_KEY, svk);
   }
 
   protected Composite getLargerKdf(byte[] shSe) {
-    //HMAC-SHA-256[0,(byte)1||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-cipher"||ShSe]
+    // HMAC-SHA-256[0,(byte)1||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-cipher"||ShSe]
     ByteBuffer buffer = ByteBuffer
         .allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_CIPHER.length + shSe.length);
     buffer.put((byte) 1);
@@ -1013,9 +992,9 @@ public class CryptoService {
     byte[] sek = new byte[Const.BIT_LEN_256 / Byte.SIZE]; // 32 bytes
     buffer.get(sek);
 
-    //HMAC-SHA-256[0,(byte)2||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-hmac"||ShSe]
-    buffer = ByteBuffer
-        .allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_HMAC.length + shSe.length);
+    // HMAC-SHA-256[0,(byte)2||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-hmac"||ShSe]
+    buffer =
+        ByteBuffer.allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_HMAC.length + shSe.length);
 
     buffer.put((byte) 2);
     buffer.put(Const.KDF_STRING);
@@ -1025,12 +1004,12 @@ public class CryptoService {
     buffer.flip();
     hash = hash(Const.HMAC_SHA_384, Const.HMAC_ZERO, Composite.unwrap(buffer));
     buffer = ByteBuffer.wrap(hash.getAsBytes(Const.HASH));
-    byte[] svk1 = new byte[Const.BIT_LEN_384 / Byte.SIZE]; //48 bytes
+    byte[] svk1 = new byte[Const.BIT_LEN_384 / Byte.SIZE]; // 48 bytes
     buffer.get(svk1);
 
-    //HMAC-SHA-256[0,(byte)3||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-hmac"||ShSe]
-    buffer = ByteBuffer
-        .allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_HMAC.length + shSe.length);
+    // HMAC-SHA-256[0,(byte)3||"MarshalPointKDF"||(byte)0||"AutomaticProvisioning-hmac"||ShSe]
+    buffer =
+        ByteBuffer.allocate(1 + Const.KDF_STRING.length + 1 + Const.PROV_HMAC.length + shSe.length);
     buffer.put((byte) 3);
     buffer.put(Const.KDF_STRING);
     buffer.put((byte) 0);
@@ -1039,7 +1018,7 @@ public class CryptoService {
     buffer.flip();
     hash = hash(Const.HMAC_SHA_384, Const.HMAC_ZERO, Composite.unwrap(buffer));
     buffer = ByteBuffer.wrap(hash.getAsBytes(Const.HASH));
-    byte[] svk2 = new byte[(Const.BIT_LEN_256 / Byte.SIZE) / 2];//16 bytes
+    byte[] svk2 = new byte[(Const.BIT_LEN_256 / Byte.SIZE) / 2];// 16 bytes
     buffer.get(svk2);
 
     buffer = ByteBuffer.allocate(svk1.length + svk2.length);
@@ -1047,16 +1026,15 @@ public class CryptoService {
     buffer.put(svk2);
     buffer.flip();
 
-    return Composite.newArray()
-        .set(Const.FIRST_KEY, sek)
-        .set(Const.SECOND_KEY, Composite.unwrap(buffer)); //svk
+    return Composite.newArray().set(Const.FIRST_KEY, sek).set(Const.SECOND_KEY,
+        Composite.unwrap(buffer)); // svk
   }
 
   protected byte[] getCtrIv() {
     ByteBuffer buffer = ByteBuffer.allocate(Const.IV_SIZE);
     byte[] seed = getRandomBytes(Const.IV_SEED_SIZE);
     buffer.put(seed);
-    buffer.put(new byte[]{0, 0, 0, 0});
+    buffer.put(new byte[] {0, 0, 0, 0});
     buffer.flip();
     return Composite.unwrap(buffer);
   }
@@ -1066,7 +1044,7 @@ public class CryptoService {
     final ByteBuffer iv = state.getAsByteBuffer(Const.THIRD_KEY);
     long counter = state.getAsNumber(Const.FOURTH_KEY).longValue();
     if (cipherName.indexOf("/CTR/") > 0) {
-      //the last 4 bytes of the iv will be the counter
+      // the last 4 bytes of the iv will be the counter
       byte[] seed = new byte[Const.IV_SEED_SIZE];
       iv.get(seed);
 
@@ -1108,7 +1086,7 @@ public class CryptoService {
     try {
       final Cipher cipher = getCipherInstance(state.getAsString(Const.FIRST_KEY));
       final Composite keys = state.getAsComposite(Const.SECOND_KEY);
-      //final byte[] iv = state.getAsBytes(Const.THIRD_KEY);
+      // final byte[] iv = state.getAsBytes(Const.THIRD_KEY);
       final byte[] sek = keys.getAsBytes(Const.FIRST_KEY);
       final byte[] svk = keys.getAsBytes(Const.SECOND_KEY);
       final Key keySpec = new SecretKeySpec(sek, Const.AES);
@@ -1128,9 +1106,8 @@ public class CryptoService {
       this.verifyBytes(mac1, mac2.getAsBytes(Const.HASH));
 
       return cipher.doFinal(ciphered);
-    } catch (NoSuchPaddingException | NoSuchAlgorithmException
-        | InvalidAlgorithmParameterException | InvalidKeyException
-        | BadPaddingException | IllegalBlockSizeException e) {
+    } catch (NoSuchPaddingException | NoSuchAlgorithmException | InvalidAlgorithmParameterException
+        | InvalidKeyException | BadPaddingException | IllegalBlockSizeException e) {
       throw new CryptoServiceException(e);
     }
   }
@@ -1160,9 +1137,8 @@ public class CryptoService {
       updateIv(ciphered.length, state);
       return message;
 
-    } catch (NoSuchPaddingException | NoSuchAlgorithmException
-        | InvalidAlgorithmParameterException | InvalidKeyException
-        | BadPaddingException | IllegalBlockSizeException e) {
+    } catch (NoSuchPaddingException | NoSuchAlgorithmException | InvalidAlgorithmParameterException
+        | InvalidKeyException | BadPaddingException | IllegalBlockSizeException e) {
       throw new CryptoServiceException(e);
     }
   }
@@ -1232,9 +1208,7 @@ public class CryptoService {
     byte[] guid = new byte[Const.GUID_SIZE];
     System.arraycopy(ueid, 1, guid, 0, guid.length);
 
-    return Composite.newArray()
-        .set(Const.FIRST_KEY, guid)
-        .getAsUuid(Const.FIRST_KEY);
+    return Composite.newArray().set(Const.FIRST_KEY, guid).getAsUuid(Const.FIRST_KEY);
   }
 
   /**
@@ -1268,7 +1242,7 @@ public class CryptoService {
     Composite header = voucher.getAsComposite(Const.OV_HEADER);
     Composite pub = header.getAsComposite(Const.OVH_PUB_KEY);
     Composite entries = voucher.getAsComposite(Const.OV_ENTRIES);
-    //can be zero
+    // can be zero
     if (entries.size() > 0) {
       Composite entry = entries.getAsComposite(entries.size() - 1);
       Composite payload = Composite.fromObject(entry.getAsBytes(Const.COSE_SIGN1_PAYLOAD));

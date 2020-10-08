@@ -62,7 +62,7 @@ public abstract class To2ClientService extends DeviceService {
       throw new InvalidMessageException();
     }
 
-    //update variable
+    // update variable
     this.prevEntryKey = payload.getAsComposite(Const.OVE_PUB_KEY);
     int hashType = getCryptoService().getCompatibleHashType(verifyKey);
     this.prevEntryHash = getCryptoService().hash(hashType, entry.toBytes());
@@ -77,40 +77,34 @@ public abstract class To2ClientService extends DeviceService {
 
   protected void nextMessage(Composite request, Composite reply) {
     if (this.numEntries == 0 || entryNum == (this.numEntries - 1)) {
-      Composite deviceState = getCryptoService()
-          .getKeyExchangeMessage(Const.ECDH_ALG_NAME, Const.KEY_EXCHANGE_B);
+      Composite deviceState =
+          getCryptoService().getKeyExchangeMessage(Const.ECDH_ALG_NAME, Const.KEY_EXCHANGE_B);
 
       byte[] ownSecret = getCryptoService().getSharedSecret(this.kexA, deviceState);
 
-      this.ownState = getCryptoService()
-          .getEncryptionState(ownSecret,
-              getStorage().getCipherSuiteName());
+      this.ownState =
+          getCryptoService().getEncryptionState(ownSecret, getStorage().getCipherSuiteName());
 
       byte[] ueid = getCryptoService()
-          .getUeidFromGuid(
-              getStorage()
-                  .getDeviceCredentials()
-                  .getAsBytes(Const.DC_GUID));
+          .getUeidFromGuid(getStorage().getDeviceCredentials().getAsBytes(Const.DC_GUID));
 
-      //build EAT token based on private key and sign
-      Composite iotPayload = Composite.newArray()
-          .set(Const.FIRST_KEY, deviceState.getAsBytes(Const.FIRST_KEY));
+      // build EAT token based on private key and sign
+      Composite iotPayload =
+          Composite.newArray().set(Const.FIRST_KEY, deviceState.getAsBytes(Const.FIRST_KEY));
 
-      Composite payload = Composite.newMap()
-          .set(Const.EAT_NONCE, nonce6)
-          .set(Const.EAT_UEID, ueid)
+      Composite payload = Composite.newMap().set(Const.EAT_NONCE, nonce6).set(Const.EAT_UEID, ueid)
           .set(Const.EAT_SDO_IOT, iotPayload);
 
       Composite signature = null;
       try (CloseableKey key = new CloseableKey(getStorage().getSigningKey())) {
-        signature = getCryptoService().sign(key.get(), payload.toBytes());
+        signature = getCryptoService().sign(key.get(), getCryptoService().getCoseAlgorithm(key.get()),
+            payload.toBytes());
       } catch (IOException e) {
         throw new DispatchException(e);
       }
 
       nonce7 = getCryptoService().getRandomBytes(Const.NONCE16_SIZE);
-      Composite uph = Composite.newMap()
-          .set(Const.EUPH_NONCE, nonce7);
+      Composite uph = Composite.newMap().set(Const.EUPH_NONCE, nonce7);
 
       byte[] maroePrefix = getStorage().getMaroePrefix();
       if (maroePrefix != null) {
@@ -124,8 +118,7 @@ public abstract class To2ClientService extends DeviceService {
 
     } else {
       this.entryNum++;
-      Composite body = Composite.newArray()
-          .set(Const.FIRST_KEY, this.entryNum);
+      Composite body = Composite.newArray().set(Const.FIRST_KEY, this.entryNum);
       reply.set(Const.SM_MSG_ID, Const.TO2_GET_OVNEXT_ENTRY);
       reply.set(Const.SM_BODY, body);
     }
@@ -137,43 +130,38 @@ public abstract class To2ClientService extends DeviceService {
     Composite cose = request.getAsComposite(Const.SM_BODY);
     Composite payload = Composite.fromObject(cose.getAsBytes(Const.COSE_SIGN1_PAYLOAD));
 
-    nonce6 = cose.getAsComposite(Const.COSE_SIGN1_UNPROTECTED)
-        .getAsBytes(Const.CUPH_NONCE);
+    nonce6 = cose.getAsComposite(Const.COSE_SIGN1_UNPROTECTED).getAsBytes(Const.CUPH_NONCE);
 
     int entries = payload.getAsNumber(Const.SECOND_KEY).intValue();
     byte[] receivedNonce5 = payload.getAsBytes(Const.FOURTH_KEY);
     this.kexA = payload.getAsBytes(Const.SIXTH_KEY);
     this.numEntries = entries;
 
-    //verify nonce from hello
+    // verify nonce from hello
     getCryptoService().verifyBytes(receivedNonce5, nonce5);
 
     Composite hmac = payload.getAsComposite(Const.THIRD_KEY);
     Composite ovh = payload.getAsComposite(Const.FIRST_KEY);
-    Composite hmac1 = getCryptoService().hash(
-        hmac.getAsNumber(Const.HASH_TYPE).intValue(),
-        getStorage()
-            .getDeviceCredentials()
-            .getAsBytes(Const.DC_HMAC_SECRET),
-        ovh.toBytes());
+    Composite hmac1 = getCryptoService().hash(hmac.getAsNumber(Const.HASH_TYPE).intValue(),
+        getStorage().getDeviceCredentials().getAsBytes(Const.DC_HMAC_SECRET), ovh.toBytes());
 
-    //verify HMAC
+    // verify HMAC
     ByteBuffer b1 = hmac1.getAsByteBuffer(Const.HASH);
     ByteBuffer b2 = hmac.getAsByteBuffer(Const.HASH);
     if (b1.compareTo(b2) != 0) {
       throw new InvalidMessageException();
     }
 
-    //verify this message
-    Composite pub = cose.getAsComposite(Const.COSE_SIGN1_UNPROTECTED)
-        .getAsComposite(Const.CUPH_PUBKEY);
+    // verify this message
+    Composite pub =
+        cose.getAsComposite(Const.COSE_SIGN1_UNPROTECTED).getAsComposite(Const.CUPH_PUBKEY);
 
     PublicKey verifyKey = getCryptoService().decode(pub);
     getCryptoService().verify(verifyKey, cose);
 
-    //TODO: verify to1d
+    // TODO: verify to1d
 
-    //calculate and set hdrHash
+    // calculate and set hdrHash
     byte[] guid = ovh.getAsBytes(Const.OVH_GUID);
     byte[] devInfo = ovh.getAsBytes(Const.OVH_DEVICE_INFO);
     ByteBuffer buffer = ByteBuffer.allocate(guid.length + devInfo.length);
@@ -184,7 +172,7 @@ public abstract class To2ClientService extends DeviceService {
     int hashType = getCryptoService().getCompatibleHashType(verifyKey);
     this.hdrHash = getCryptoService().hash(hashType, Composite.unwrap(buffer));
 
-    //calculate prevHash
+    // calculate prevHash
     byte[] ovhBytes = ovh.toBytes();
     byte[] hmacBytes = hmac.toBytes();
     buffer = ByteBuffer.allocate(ovhBytes.length + hmacBytes.length);
@@ -221,8 +209,8 @@ public abstract class To2ClientService extends DeviceService {
   protected void doSetupDevice(Composite request, Composite reply) {
     getStorage().continuing(request, reply);
 
-    Composite payload = Composite.newArray()
-        .set(Const.FIRST_KEY, getStorage().getReplacementHmac());
+    Composite payload =
+        Composite.newArray().set(Const.FIRST_KEY, getStorage().getReplacementHmac());
 
     Composite body = getCryptoService().encrypt(payload.toBytes(), this.ownState);
 
@@ -265,9 +253,8 @@ public abstract class To2ClientService extends DeviceService {
     boolean isMore2 = payload.getAsBoolean(Const.FIRST_KEY);
 
     if (isDone && isMore == false && isMore2 == false) {
-      //change message to done
-      payload = Composite.newArray()
-          .set(Const.FIRST_KEY, this.nonce6);
+      // change message to done
+      payload = Composite.newArray().set(Const.FIRST_KEY, this.nonce6);
       reply.set(Const.SM_MSG_ID, Const.TO2_DONE);
     } else {
       reply.set(Const.SM_MSG_ID, Const.TO2_DEVICE_SERVICE_INFO);
@@ -328,20 +315,15 @@ public abstract class To2ClientService extends DeviceService {
 
     Composite dc = getStorage().getDeviceCredentials();
     nonce5 = getCryptoService().getRandomBytes(Const.NONCE16_SIZE);
-    Composite body = Composite.newArray()
-        .set(Const.FIRST_KEY,
-            dc.getAsBytes(Const.DC_GUID))
-        .set(Const.SECOND_KEY, nonce5)
-        .set(Const.THIRD_KEY, getStorage().getKexSuiteName())
+    Composite body = Composite.newArray().set(Const.FIRST_KEY, dc.getAsBytes(Const.DC_GUID))
+        .set(Const.SECOND_KEY, nonce5).set(Const.THIRD_KEY, getStorage().getKexSuiteName())
         .set(Const.FOURTH_KEY, getStorage().getCipherSuiteName())
         .set(Const.FIFTH_KEY, getStorage().getSigInfoA());
 
     getStorage().starting(Const.EMPTY_MESSAGE, Const.EMPTY_MESSAGE);
-    DispatchResult dr = new DispatchResult(Composite.newArray()
-        .set(Const.SM_LENGTH, Const.DEFAULT)
+    DispatchResult dr = new DispatchResult(Composite.newArray().set(Const.SM_LENGTH, Const.DEFAULT)
         .set(Const.SM_MSG_ID, Const.TO2_HELLO_DEVICE)
-        .set(Const.SM_PROTOCOL_VERSION,
-            dc.getAsNumber(Const.DC_PROTVER).intValue())
+        .set(Const.SM_PROTOCOL_VERSION, dc.getAsNumber(Const.DC_PROTVER).intValue())
         .set(Const.SM_PROTOCOL_INFO, Composite.fromObject(Const.EMPTY_BYTE))
         .set(Const.SM_BODY, body), false);
 

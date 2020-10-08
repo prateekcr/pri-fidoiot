@@ -19,17 +19,16 @@ public abstract class To1ClientService extends DeviceService {
     byte[] nonce4 = body.getAsBytes(Const.FIRST_KEY);
     body.verifyMaxKey(Const.SECOND_KEY);
 
-    byte[] ueid = getCryptoService().getUeidFromGuid(
-        getStorage().getDeviceCredentials().getAsBytes(Const.DC_GUID));
+    byte[] ueid = getCryptoService()
+        .getUeidFromGuid(getStorage().getDeviceCredentials().getAsBytes(Const.DC_GUID));
 
-    //build EAT token based on private key and sign
-    Composite payload = Composite.newMap()
-        .set(Const.EAT_NONCE, nonce4)
-        .set(Const.EAT_UEID, ueid);
+    // build EAT token based on private key and sign
+    Composite payload = Composite.newMap().set(Const.EAT_NONCE, nonce4).set(Const.EAT_UEID, ueid);
 
     Composite signature = null;
     try (CloseableKey key = new CloseableKey(getStorage().getSigningKey())) {
-      signature = getCryptoService().sign(key.get(), payload.toBytes());
+      signature = getCryptoService().sign(key.get(), getCryptoService().getCoseAlgorithm(key.get()),
+          payload.toBytes());
     } catch (IOException e) {
       throw new DispatchException(e);
     }
@@ -80,14 +79,11 @@ public abstract class To1ClientService extends DeviceService {
   public DispatchResult getHelloMessage() {
 
     Composite body = Composite.newArray()
-        .set(Const.FIRST_KEY,
-            getStorage().getDeviceCredentials().getAsBytes(Const.DC_GUID))
-        .set(Const.SECOND_KEY,
-            getStorage().getSigInfoA());
+        .set(Const.FIRST_KEY, getStorage().getDeviceCredentials().getAsBytes(Const.DC_GUID))
+        .set(Const.SECOND_KEY, getStorage().getSigInfoA());
 
     getStorage().starting(Const.EMPTY_MESSAGE, Const.EMPTY_MESSAGE);
-    DispatchResult dr = new DispatchResult(Composite.newArray()
-        .set(Const.SM_LENGTH, Const.DEFAULT)
+    DispatchResult dr = new DispatchResult(Composite.newArray().set(Const.SM_LENGTH, Const.DEFAULT)
         .set(Const.SM_MSG_ID, Const.TO1_HELLO_RV)
         .set(Const.SM_PROTOCOL_VERSION,
             getStorage().getDeviceCredentials().getAsNumber(Const.DC_PROTVER))

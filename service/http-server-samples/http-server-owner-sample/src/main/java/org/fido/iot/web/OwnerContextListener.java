@@ -3,18 +3,24 @@
 
 package org.fido.iot.web;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-
+import java.security.UnrecoverableKeyException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.util.Arrays;
+import java.util.Iterator;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 import javax.sql.DataSource;
-
 import org.apache.commons.dbcp2.BasicDataSource;
-import org.fido.iot.certutils.PemLoader;
 import org.fido.iot.protocol.Composite;
 import org.fido.iot.protocol.Const;
 import org.fido.iot.protocol.CryptoService;
@@ -42,13 +48,11 @@ public class OwnerContextListener implements ServletContextListener {
       + "vzoO1w0oYiW9iLGwmUkardXpNeSG3giOc+wR3mthmRoGiut3Mg9eYDSjJjAkMBIG\n"
       + "A1UdEwEB/wQIMAYBAf8CAQEwDgYDVR0PAQH/BAQDAgIEMAoGCCqGSM49BAMCA0kA\n"
       + "MEYCIQDrb3b3tigiReIsF+GiImVKJuBsjU6z8mOtlNyfAr7LPAIhAPOl6TaXaasL\n"
-      + "vgML12FQQDT502S6PQPxmB1tRrV2dp8/\n"
-      + "-----END CERTIFICATE-----\n"
+      + "vgML12FQQDT502S6PQPxmB1tRrV2dp8/\n" + "-----END CERTIFICATE-----\n"
       + "-----BEGIN EC PRIVATE KEY-----\n"
       + "MHcCAQEEIHg45vhXH9m2SdzNxU55cp94yb962JoNn8F9Zpe6zTNqoAoGCCqGSM49\n"
       + "AwEHoUQDQgAEWVUE2G0GLy8scmAOyQyhcBiF/fSUd3i/Og7XDShiJb2IsbCZSRqt\n"
-      + "1ek15IbeCI5z7BHea2GZGgaK63cyD15gNA==\n"
-      + "-----END EC PRIVATE KEY-----";
+      + "1ek15IbeCI5z7BHea2GZGgaK63cyD15gNA==\n" + "-----END EC PRIVATE KEY-----";
 
   private static final String VOUCHER = ""
       + "8486186450f0956089c0df4c349c61f460457e87eb81858205696c6f63616c686f73748203191f68820c01820"
@@ -78,6 +82,7 @@ public class OwnerContextListener implements ServletContextListener {
       + "ccd114977ff50221009e9cdd0815358d35d543bae8362f02ddced995ab1ff96115d423c76313ccea2c";
 
   private KeyResolver resolver;
+  private KeyStore ownerKeyStore = null;
 
   @Override
   public void contextInitialized(ServletContextEvent sce) {
@@ -89,7 +94,7 @@ public class OwnerContextListener implements ServletContextListener {
     ds.setUsername(sc.getInitParameter("db.user"));
     ds.setPassword(sc.getInitParameter("db.password"));
 
-    System.out.println(ds.getUrl());
+    sc.log(ds.getUrl());
 
     ds.setMinIdle(5);
     ds.setMaxIdle(10);
@@ -100,10 +105,36 @@ public class OwnerContextListener implements ServletContextListener {
     sc.setAttribute("datasource", ds);
     sc.setAttribute("cryptoservice", cs);
 
+    char[] pin = "123456".toCharArray();
+    try {
+      ownerKeyStore = KeyStore.getInstance("PKCS11");
+      ownerKeyStore.load(null, pin);
+    } catch (NoSuchAlgorithmException | CertificateException | IOException | KeyStoreException e1) {
+      sc.log(e1.getMessage());
+    }
+
     resolver = new KeyResolver() {
       @Override
-      public PrivateKey getKey(PublicKey key) {
-        return PemLoader.loadPrivateKey(ownerKeyPem);
+      public PrivateKey getKey(PublicKey publicKey) {
+        if (null != ownerKeyStore && null != publicKey) {
+          try {
+            Iterator<String> aliases = ownerKeyStore.aliases().asIterator();
+            while (aliases.hasNext()) {
+              String alias = aliases.next();
+              sc.log("Comparing with " + alias);
+              Certificate certificate = ownerKeyStore.getCertificate(alias);
+              if (null == certificate) {
+                continue;
+              }
+              if (Arrays.equals(certificate.getPublicKey().getEncoded(), publicKey.getEncoded())) {
+                return (PrivateKey) ownerKeyStore.getKey(alias, pin);
+              }
+            }
+          } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException e) {
+            sc.log(e.getMessage());
+          }
+        }
+        return null;
       }
     };
 
@@ -133,15 +164,14 @@ public class OwnerContextListener implements ServletContextListener {
       }
     };
     sc.setAttribute(Const.DISPATCHER_ATTRIBUTE, dispatcher);
-    //create tables
+    // create tables
     OwnerDbManager manager = new OwnerDbManager();
     manager.createTables(ds);
     manager.importVoucher(ds, Composite.fromObject(VOUCHER));
   }
 
   @Override
-  public void contextDestroyed(ServletContextEvent sce) {
-  }
+  public void contextDestroyed(ServletContextEvent sce) {}
 
   private To2ServerService createTo2Service(CryptoService cs, DataSource ds) {
     return new To2ServerService() {
