@@ -88,6 +88,7 @@ public class ProtocolHandler implements Runnable {
     HttpServletRequest request = (HttpServletRequest) asyncCtx.getRequest();
     HttpServletResponse response = (HttpServletResponse) asyncCtx.getResponse();
 
+    System.out.println("[Request]: " + request.getRequestURL().toString());
     if (request.getContentType() == null
         || request.getContentType().compareToIgnoreCase(Const.HTTP_APPLICATION_CBOR) != 0) {
       response.setStatus(Const.HTTP_UNSUPPORTED_MEDIA_TYPE);
